@@ -50,6 +50,12 @@ app.Run();
 
 static string ResolveMongoConnectionString(IConfiguration configuration, string? configuredConnectionString)
 {
+    var mongoUri = configuration["MONGODB_URI"];
+    if (!string.IsNullOrWhiteSpace(mongoUri))
+    {
+        return mongoUri;
+    }
+
     if (!string.IsNullOrWhiteSpace(configuredConnectionString) &&
         !configuredConnectionString.Contains("<db_password>", StringComparison.OrdinalIgnoreCase) &&
         !configuredConnectionString.Contains("<", StringComparison.Ordinal))
