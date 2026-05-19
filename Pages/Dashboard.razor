@@ -1,0 +1,83 @@
+@page "/dashboard"
+@inject IUserService UserService
+@inject NavigationManager Nav
+
+@if (!isReady)
+{
+    <p>Завантаження...</p>
+}
+else if (UserService.CurrentUser == null)
+{
+    Nav.NavigateTo("/auth");
+}
+else
+{
+    var user = UserService.CurrentUser!;
+    var p = user.ProgressProfile;
+    <div class="glass-panel dashboard-panel">
+        <div class="dash-header">
+            @if (!string.IsNullOrEmpty(p.AvatarDataUri))
+            {
+                <img src="@p.AvatarDataUri" alt="avatar" class="dash-avatar" />
+            }
+            else
+            {
+                <div class="dash-avatar dash-avatar-placeholder">🍷</div>
+            }
+            <div>
+                <h2 style="margin:0;">Вітаємо, @p.GetDisplayNameOrUsername(user.Username)!</h2>
+                <p class="muted">@StudyOptions.LanguageDisplay · Рівень @p.Level · 🎯 @p.TotalScore · ✅ @p.CorrectAnswers/@p.TotalAttempts</p>
+            </div>
+        </div>
+
+        <div class="dash-grid">
+            <a class="dash-card" href="/levels">
+                <span class="dash-icon">📚</span>
+                <strong>Рівні</strong>
+                <span class="muted">Скінченні рівні A1–B1</span>
+            </a>
+            <a class="dash-card" href="/play">
+                <span class="dash-icon">🕹️</span>
+                <strong>Гра</strong>
+                <span class="muted">Оберіть режим</span>
+            </a>
+            <a class="dash-card" href="/review">
+                <span class="dash-icon">📖</span>
+                <strong>Словник</strong>
+                <span class="muted">Помилки та вивчені слова</span>
+            </a>
+            <a class="dash-card" href="/profile">
+                <span class="dash-icon">⚙️</span>
+                <strong>Профіль</strong>
+                <span class="muted">Нік, фото, пароль</span>
+            </a>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isReady;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        isReady = true;
+    }
+}
+
+<style>
+    .dashboard-panel { max-width: 560px; }
+    .dash-header { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+    .dash-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid #800c19; }
+    .dash-avatar-placeholder { display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); font-size: 1.8rem; }
+    .muted { color: #b0bec5; font-size: 0.9rem; margin: 4px 0 0; display: block; }
+    .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .dash-card {
+        display: flex; flex-direction: column; gap: 4px; padding: 16px;
+        background: rgba(0,0,0,0.25); border: 1px solid rgba(128,12,25,0.4);
+        border-radius: 12px; text-decoration: none; color: inherit; transition: background 0.2s;
+    }
+    .dash-card:hover { background: rgba(78,7,15,0.5); }
+    .dash-icon { font-size: 1.6rem; }
+    @@media (max-width: 500px) { .dash-grid { grid-template-columns: 1fr; } }
+</style>

@@ -1,0 +1,65 @@
+@page "/auth"
+@page "/"
+@inject UserService US
+@inject NavigationManager Nav
+
+<div class="glass-panel">
+    <h2 style="margin-top: 0;">@(isJoin ? "Реєстрація" : "Вхід до LinguaQuest")</h2>
+    <p class="auth-sub">🇬🇧 Вивчення англійської мови (UK → EN)</p>
+
+    <input @bind="formUser" placeholder="Логін" />
+    <input @bind="formPass" type="password" placeholder="Пароль" />
+
+    @if (isJoin)
+    {
+        <p class="auth-sub">Старт з рівня <strong>A1</strong> — наступні відкриються під час навчання.</p>
+    }
+
+    @if (!string.IsNullOrEmpty(msg))
+    {
+        <p class="auth-err">⚠️ @msg</p>
+    }
+
+    <button class="action-button" @onclick="AuthSubmit">Продовжити</button>
+    <p class="auth-switch" @onclick="() => isJoin = !isJoin">
+        @(isJoin ? "Вже зареєстровані? Увійти" : "Вперше тут? Створити профіль")
+    </p>
+</div>
+
+<style>
+    .auth-sub { color: #b0bec5; font-size: 0.9rem; margin: 0 0 12px; }
+    .field-label { display: block; margin-top: 8px; font-size: 0.85rem; color: #b0bec5; }
+    .auth-err { color: #ef5350; font-size: 0.85rem; }
+    .auth-switch {
+        font-size: 0.85rem; color: #b0bec5; cursor: pointer;
+        text-decoration: underline; text-align: center; margin-top: 15px;
+    }
+</style>
+
+@code {
+    private string formUser = "", formPass = "", msg = "";
+    private bool isJoin;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await US.RestoreSessionAsync();
+        if (US.CurrentUser != null) Nav.NavigateTo("/dashboard");
+    }
+
+    private async Task AuthSubmit()
+    {
+        msg = "";
+        if (string.IsNullOrWhiteSpace(formUser) || string.IsNullOrWhiteSpace(formPass))
+        {
+            msg = "Заповніть поля!";
+            return;
+        }
+
+        bool ok = isJoin
+            ? await US.RegisterAsync(formUser, formPass, "A1")
+            : await US.LoginAsync(formUser, formPass);
+
+        if (ok) Nav.NavigateTo("/dashboard");
+        else msg = isJoin ? "Цей логін вже зайнятий." : "Помилка авторизації.";
+    }
+}

@@ -1,0 +1,137 @@
+@page "/profile"
+@inject IUserService UserService
+@inject NavigationManager Nav
+
+<div class="glass-panel profile-panel">
+    <h2 style="margin-top:0;">⚙️ Профіль</h2>
+    <p class="muted">@StudyOptions.LanguageDisplay · налаштування акаунта</p>
+
+    @if (msg != null)
+    {
+        <p class="@(msgOk ? "ok" : "err")">@msg</p>
+    }
+
+    <div class="avatar-row">
+        @if (!string.IsNullOrEmpty(avatarPreview))
+        {
+            <img src="@avatarPreview" class="profile-avatar" alt="avatar" />
+        }
+        else
+        {
+            <div class="profile-avatar placeholder">🍷</div>
+        }
+        <InputFile OnChange="OnAvatarSelected" accept="image/*" />
+    </div>
+
+    <label>Нікнейм</label>
+    <input @bind="displayName" placeholder="Ваш нік" />
+
+    <label>Активний рівень</label>
+    <select @bind="level">
+        @foreach (var lvl in new[] { "A1", "A2", "B1" })
+        {
+            <option value="@lvl" disabled="@(!IsUnlocked(lvl))">@lvl @(IsUnlocked(lvl) ? "" : "🔒")</option>
+        }
+    </select>
+
+    <button class="action-button" @onclick="SaveProfile">Зберегти профіль</button>
+
+    <hr class="divider" />
+
+    <h3>Змінити пароль</h3>
+    <input @bind="currentPassword" type="password" placeholder="Поточний пароль" />
+    <input @bind="newPassword" type="password" placeholder="Новий пароль" />
+    <input @bind="confirmPassword" type="password" placeholder="Підтвердіть пароль" />
+    <button class="action-button" @onclick="ChangePassword">Оновити пароль</button>
+
+    <a href="/dashboard" class="back-link">← На головну</a>
+</div>
+
+@code {
+    private string displayName = "";
+    private string level = "A1";
+    private string? avatarPreview;
+    private string currentPassword = "";
+    private string newPassword = "";
+    private string confirmPassword = "";
+    private string? msg;
+    private bool msgOk;
+    private UserProfile? profile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        if (UserService.CurrentUser == null) { Nav.NavigateTo("/auth"); return; }
+
+        profile = UserService.CurrentUser.ProgressProfile;
+        displayName = profile.GetDisplayNameOrUsername(UserService.CurrentUser.Username);
+        level = profile.Level;
+        avatarPreview = profile.AvatarDataUri;
+    }
+
+    private bool IsUnlocked(string lvl) => profile?.IsLevelUnlocked(lvl) ?? false;
+
+    private async Task OnAvatarSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || file.Size > 200_000)
+        {
+            msg = "Фото до 200 КБ (JPEG/PNG).";
+            msgOk = false;
+            return;
+        }
+
+        using var stream = file.OpenReadStream(200_000);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        var b64 = Convert.ToBase64String(ms.ToArray());
+        var mime = file.ContentType.StartsWith("image/") ? file.ContentType : "image/jpeg";
+        avatarPreview = $"data:{mime};base64,{b64}";
+        msg = null;
+    }
+
+    private async Task SaveProfile()
+    {
+        var ok = await UserService.UpdateProfileAsync(displayName, avatarPreview, level);
+        msgOk = ok;
+        msg = ok ? "Профіль збережено." : "Помилка збереження.";
+        profile = UserService.CurrentUser?.ProgressProfile;
+    }
+
+    private async Task ChangePassword()
+    {
+        if (newPassword != confirmPassword)
+        {
+            msgOk = false;
+            msg = "Паролі не збігаються.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 4)
+        {
+            msgOk = false;
+            msg = "Новий пароль занадто короткий (мін. 4 символи).";
+            return;
+        }
+
+        var ok = await UserService.ChangePasswordAsync(currentPassword, newPassword);
+        msgOk = ok;
+        msg = ok ? "Пароль оновлено." : "Невірний поточний пароль.";
+        if (ok) currentPassword = newPassword = confirmPassword = "";
+    }
+}
+
+<style>
+    .profile-panel { max-width: 440px; }
+    .muted { color: #b0bec5; font-size: 0.9rem; }
+    label { display: block; margin-top: 10px; font-size: 0.85rem; color: #b0bec5; }
+    .avatar-row { display: flex; align-items: center; gap: 12px; margin: 12px 0; }
+    .profile-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #800c19; }
+    .profile-avatar.placeholder {
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.3); font-size: 2rem;
+    }
+    .divider { border: none; border-top: 1px solid rgba(128,12,25,0.4); margin: 20px 0; }
+    .ok { color: #81c784; }
+    .err { color: #e57373; }
+    .back-link { display: block; margin-top: 16px; color: #b0bec5; text-align: center; }
+</style>

@@ -1,0 +1,170 @@
+@page "/levels"
+@inject IUserService UserService
+@inject IWordService WordService
+@inject NavigationManager Nav
+
+<div class="glass-panel levels-panel">
+    <h2 style="margin-top:0;">📚 Рівні англійської</h2>
+    <p class="muted">@StudyOptions.LanguageDisplay · поточний рівень: <strong>@currentLevel</strong></p>
+
+    @if (message != null)
+    {
+        <p class="msg @(messageOk ? "ok" : "err")">@message</p>
+    }
+
+    @foreach (var card in levelCards)
+    {
+        <div class="level-card @card.CssClass">
+            <div class="level-top">
+                <strong>@card.Level</strong>
+                <span class="badge">@card.StatusLabel</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width:@card.Percent%"></div>
+            </div>
+            <p class="muted">@card.Learned / @card.Total слів · @card.Percent%</p>
+            <div class="level-actions">
+                @if (card.CanPlay)
+                {
+                    <button class="action-button" @onclick="() => SelectLevel(card.Level)">Грати на цьому рівні</button>
+                }
+                @if (card.CanSkip)
+                {
+                    <button class="btn-outline" @onclick="() => SkipLevel(card.Level)">Закрити без завершення</button>
+                }
+                @if (card.Status == LevelStatus.Locked)
+                {
+                    <p class="muted small">Завершіть або пропустіть попередній рівень</p>
+                }
+            </div>
+        </div>
+    }
+
+    <a href="/dashboard" class="back-link">← На головну</a>
+</div>
+
+@code {
+    private string currentLevel = "A1";
+    private string? message;
+    private bool messageOk;
+    private List<LevelCardVm> levelCards = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        if (UserService.CurrentUser == null) { Nav.NavigateTo("/auth"); return; }
+
+        currentLevel = UserService.CurrentUser.ProgressProfile.Level;
+        await RefreshCardsAsync();
+    }
+
+    private async Task RefreshCardsAsync()
+    {
+        var p = UserService.CurrentUser!.ProgressProfile;
+        levelCards = new List<LevelCardVm>();
+
+        foreach (var lvl in new[] { "A1", "A2", "B1" })
+        {
+            var lvlEnum = StudyOptions.ParseLevel(lvl);
+            var total = await WordService.CountWordsAsync(StudyOptions.TargetLanguage, lvlEnum);
+            var allWords = await WordService.GetWordsAsync(StudyOptions.TargetLanguage, lvlEnum);
+            var ids = allWords.Select(w => w.Id).ToHashSet();
+            var learned = p.LearnedWordIds.Count(id => ids.Contains(id));
+            var status = p.GetLevelStatus(lvl);
+            var percent = total > 0 ? (int)Math.Round(learned * 100.0 / total) : 0;
+
+            levelCards.Add(new LevelCardVm
+            {
+                Level = lvl,
+                Total = total,
+                Learned = learned,
+                Percent = percent,
+                Status = status,
+                StatusLabel = StatusText(status),
+                CssClass = status switch
+                {
+                    LevelStatus.Locked => "locked",
+                    LevelStatus.Completed => "done",
+                    LevelStatus.Skipped => "skipped",
+                    _ => ""
+                },
+                CanPlay = status != LevelStatus.Locked,
+                CanSkip = status is LevelStatus.InProgress or LevelStatus.NotStarted
+            });
+        }
+    }
+
+    private async Task SelectLevel(string level)
+    {
+        if (await UserService.SetActiveLevelAsync(level))
+        {
+            messageOk = true;
+            message = $"Активний рівень: {level}. Перейдіть у «Гра».";
+            currentLevel = level;
+            await RefreshCardsAsync();
+        }
+    }
+
+    private async Task SkipLevel(string level)
+    {
+        if (await UserService.SkipLevelAsync(level))
+        {
+            messageOk = true;
+            message = $"Рівень {level} закрито. Відкрито наступний.";
+            currentLevel = UserService.CurrentUser!.ProgressProfile.Level;
+            await RefreshCardsAsync();
+        }
+        else
+        {
+            messageOk = false;
+            message = "Не вдалося закрити рівень.";
+        }
+    }
+
+    private static string StatusText(LevelStatus s) => s switch
+    {
+        LevelStatus.Locked => "🔒 Заблоковано",
+        LevelStatus.Completed => "✅ Завершено",
+        LevelStatus.Skipped => "⏭️ Пропущено",
+        LevelStatus.InProgress => "▶️ В процесі",
+        _ => "Новий"
+    };
+
+    private class LevelCardVm
+    {
+        public string Level { get; set; } = "";
+        public int Total { get; set; }
+        public int Learned { get; set; }
+        public int Percent { get; set; }
+        public LevelStatus Status { get; set; }
+        public string StatusLabel { get; set; } = "";
+        public string CssClass { get; set; } = "";
+        public bool CanPlay { get; set; }
+        public bool CanSkip { get; set; }
+    }
+}
+
+<style>
+    .levels-panel { max-width: 520px; }
+    .muted { color: #b0bec5; font-size: 0.9rem; }
+    .muted.small { font-size: 0.8rem; margin: 4px 0 0; }
+    .level-card {
+        margin: 12px 0; padding: 14px; border-radius: 10px;
+        background: rgba(0,0,0,0.25); border: 1px solid rgba(128,12,25,0.35);
+    }
+    .level-card.locked { opacity: 0.55; }
+    .level-card.done { border-color: #4caf50; }
+    .level-card.skipped { border-color: #ffb74d; }
+    .level-top { display: flex; justify-content: space-between; align-items: center; }
+    .badge { font-size: 0.8rem; color: #ffd54f; }
+    .progress-bar { height: 8px; background: rgba(0,0,0,0.4); border-radius: 4px; margin: 8px 0; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #4e070f, #800c19); transition: width 0.3s; }
+    .level-actions { display: flex; flex-direction: column; gap: 8px; }
+    .btn-outline {
+        width: 100%; padding: 10px; background: transparent; border: 1px solid #800c19;
+        color: #f7e6e8; border-radius: 8px; cursor: pointer;
+    }
+    .back-link { display: block; margin-top: 16px; color: #b0bec5; text-align: center; }
+    .msg.ok { color: #81c784; }
+    .msg.err { color: #e57373; }
+</style>

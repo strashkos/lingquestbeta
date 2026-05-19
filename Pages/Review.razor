@@ -1,0 +1,107 @@
+@page "/review"
+@inject IUserService UserService
+@inject IWordService WordService
+@inject NavigationManager Nav
+
+<div class="glass-panel review-panel">
+    <h2 style="margin-top:0;">📖 Словник прогресу</h2>
+    <p class="muted">@StudyOptions.LanguageDisplay · фільтр рівня: <strong>@filterLevel</strong></p>
+
+    <div class="tabs">
+        <button class="tab @(tab == "learned" ? "active" : "")" @onclick='() => tab = "learned"'>Вивчені (@learnedCount)</button>
+        <button class="tab @(tab == "mistakes" ? "active" : "")" @onclick='() => tab = "mistakes"'>Помилки (@mistakesCount)</button>
+    </div>
+
+    <select @bind="filterLevel" class="level-filter">
+        <option value="all">Усі рівні</option>
+        <option value="A1">A1</option>
+        <option value="A2">A2</option>
+        <option value="B1">B1</option>
+    </select>
+
+    @if (tab == "learned")
+    {
+        @if (learnedCount == 0)
+        {
+            <p class="muted">Немає вивчених слів для цього фільтра.</p>
+        }
+        else
+        {
+            @foreach (var w in FilteredLearned)
+            {
+                <div class="word-row">
+                    <strong>@w.SourceText</strong>
+                    <span> → @w.TargetText</span>
+                    <small class="muted">@StudyOptions.LevelLabel(w.LevelEnum)</small>
+                </div>
+            }
+        }
+    }
+    else
+    {
+        @if (mistakesCount == 0)
+        {
+            <p class="muted">Помилок для цього фільтра немає.</p>
+        }
+        else
+        {
+            @foreach (var m in FilteredMistakes)
+            {
+                <div class="word-row mistake">
+                    <strong>@m.SourceText</strong> → <span class="correct">@m.TargetText</span>
+                    <p class="muted">Ви: «@m.UserAnswer» · @m.ModeName · @m.Level · @m.OccurredAtUtc.ToLocalTime().ToString("g")</p>
+                </div>
+            }
+        }
+    }
+
+    <a href="/play" class="action-button" style="display:block;text-align:center;text-decoration:none;margin-top:12px;">🕹️ Тренуватися в грі</a>
+    <a href="/dashboard" class="back-link">← На головну</a>
+</div>
+
+@code {
+    private string tab = "learned";
+    private string filterLevel = "all";
+    private List<Word> learnedWords = new();
+    private List<MistakeEntry> mistakes = new();
+
+    private IEnumerable<Word> FilteredLearned => filterLevel == "all"
+        ? learnedWords
+        : learnedWords.Where(w => StudyOptions.LevelLabel(w.LevelEnum) == filterLevel);
+
+    private IEnumerable<MistakeEntry> FilteredMistakes => filterLevel == "all"
+        ? mistakes
+        : mistakes.Where(m => m.Level == filterLevel);
+
+    private int learnedCount => FilteredLearned.Count();
+    private int mistakesCount => FilteredMistakes.Count();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        if (UserService.CurrentUser == null) { Nav.NavigateTo("/auth"); return; }
+
+        var profile = UserService.CurrentUser.ProgressProfile;
+        learnedWords = await WordService.GetWordsByIdsAsync(profile.LearnedWordIds);
+        mistakes = profile.Mistakes.OrderByDescending(m => m.OccurredAtUtc).ToList();
+    }
+}
+
+<style>
+    .review-panel { max-width: 560px; max-height: 75vh; overflow-y: auto; }
+    .muted { color: #b0bec5; font-size: 0.85rem; }
+    .tabs { display: flex; gap: 8px; margin: 12px 0; }
+    .tab {
+        flex: 1; padding: 10px; border: 1px solid rgba(128,12,25,0.4);
+        background: rgba(0,0,0,0.25); color: #f7e6e8; border-radius: 8px; cursor: pointer;
+    }
+    .tab.active { background: #800c19; }
+    .level-filter { margin-bottom: 12px; }
+    .word-row {
+        padding: 10px; margin: 8px 0; border-radius: 8px;
+        background: rgba(0,0,0,0.2); border: 1px solid rgba(128,12,25,0.25);
+    }
+    .word-row.mistake { border-color: rgba(244,67,54,0.4); }
+    .correct { color: #81c784; }
+    .back-link { display: block; margin-top: 12px; color: #b0bec5; text-align: center; }
+</style>

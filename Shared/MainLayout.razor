@@ -1,0 +1,123 @@
+@inherits LayoutComponentBase
+@inject UserService US
+@inject NavigationManager Nav
+
+<div class="viewport-shell">
+    <header class="navbar-burgundy">
+        <a href="/dashboard" class="brand-logo">🍷 LinguaQuest</a>
+        @if (US.CurrentUser != null)
+        {
+            <nav class="nav-links">
+                <a href="/dashboard">Головна</a>
+                <a href="/levels">Рівні</a>
+                <a href="/play">Гра</a>
+                <a href="/review">Словник</a>
+                <a href="/profile">Профіль</a>
+            </nav>
+            <div class="user-stats-bar">
+                <span class="meta-txt">👤 @US.CurrentUser.ProgressProfile.GetDisplayNameOrUsername(US.CurrentUser.Username) · @US.CurrentUser.ProgressProfile.Level</span>
+                <span class="score-badge">🎯 @US.CurrentUser.ProgressProfile.TotalScore</span>
+                <button class="logout-link" @onclick="Exit">Вийти</button>
+            </div>
+        }
+    </header>
+
+    <main class="content-body">
+        @Body
+    </main>
+</div>
+
+<script>
+    window.runTimer = (dotNet, sec) => {
+        let left = sec;
+        clearInterval(window.globalTimer);
+        const box = document.getElementById('timer-count');
+        if (box) box.textContent = left;
+
+        window.globalTimer = setInterval(() => {
+            left--;
+            if (box) box.textContent = left;
+            if (left <= 0) {
+                clearInterval(window.globalTimer);
+                dotNet.invokeMethodAsync('TriggerTimeOut');
+            }
+        }, 1000);
+    };
+    window.killTimer = () => clearInterval(window.globalTimer);
+</script>
+
+<style>
+    :root {
+        --bg-deep: #0a0102;
+        --wine: #2c0307;
+        --burgundy: #4e070f;
+        --crimson: #800c19;
+        --soft-white: #f7e6e8;
+        --blur-glass: rgba(44, 3, 7, 0.5);
+    }
+
+    body {
+        margin: 0;
+        background: radial-gradient(circle at center, var(--burgundy) 0%, var(--bg-deep) 100%);
+        color: var(--soft-white);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .viewport-shell { display: flex; flex-direction: column; min-height: 100vh; }
+    
+    .navbar-burgundy {
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+        padding: 14px 28px; background: var(--blur-glass);
+        backdrop-filter: blur(12px); border-bottom: 1px solid rgba(128, 12, 25, 0.3);
+    }
+
+    .brand-logo { font-size: 1.4rem; font-weight: 900; text-shadow: 0 0 12px var(--crimson); color: inherit; text-decoration: none; }
+    .nav-links { display: flex; gap: 12px; flex-wrap: wrap; }
+    .nav-links a { color: #f7e6e8; text-decoration: none; font-size: 0.9rem; opacity: 0.9; }
+    .nav-links a:hover { color: #ffd54f; }
+    .user-stats-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .score-badge { color: #ffd54f; font-weight: bold; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 6px; }
+    .logout-link { background: transparent; border: 1px solid var(--crimson); color: white; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+    
+    .content-body { flex: 1; display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
+
+    .glass-panel {
+        background: var(--blur-glass); border: 1px solid rgba(128, 12, 25, 0.25);
+        border-radius: 16px; padding: 24px; backdrop-filter: blur(20px);
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.6); width: 100%; max-width: 450px; box-sizing: border-box;
+    }
+
+    input, select {
+        width: 100%; padding: 12px; margin: 8px 0;
+        background: rgba(0, 0, 0, 0.4); border: 1px solid var(--wine);
+        border-radius: 8px; color: #fff; box-sizing: border-box;
+    }
+
+    .action-button {
+        width: 100%; padding: 12px; background: var(--crimson);
+        color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 12px;
+    }
+    .action-button:hover { background: #961221; }
+
+    @@media (max-width: 768px) {
+        .navbar-burgundy { flex-direction: column; padding: 12px; }
+        .nav-links { justify-content: center; }
+    }
+    @@media (max-width: 600px) {
+        .user-stats-bar { width: 100%; justify-content: space-around; font-size: 0.85rem; }
+        .glass-panel { padding: 18px; margin: 0 10px; }
+    }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await US.RestoreSessionAsync();
+    }
+
+    private async Task Exit()
+    {
+        await US.LogoutAsync();
+        Nav.NavigateTo("/auth");
+    }
+}

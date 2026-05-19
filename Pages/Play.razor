@@ -1,0 +1,53 @@
+@page "/play"
+@inject IUserService UserService
+@inject NavigationManager Nav
+
+<div class="glass-panel play-panel">
+    <h2 style="margin-top:0;">🕹️ Оберіть режим гри</h2>
+    <p class="muted">@StudyOptions.LanguageDisplay · Рівень @level</p>
+
+    <button class="mode-pick" @onclick='() => Start("quick")'>
+        <strong>Швидкий вибір</strong>
+        <span class="muted">4 варіанти відповіді</span>
+    </button>
+    <button class="mode-pick" @onclick='() => Start("compose")'>
+        <strong>Вільна відповідь</strong>
+        <span class="muted">Введіть переклад вручну</span>
+    </button>
+    <button class="mode-pick" @onclick='() => Start("scramble")'>
+        <strong>Анаграма</strong>
+        <span class="muted">Зберіть слово з літер</span>
+    </button>
+    <button class="mode-pick mode-random" @onclick='() => Start("random")'>
+        <strong>Випадковий режим</strong>
+        <span class="muted">Кожне слово — новий виклик</span>
+    </button>
+
+    <a href="/dashboard" class="back-link">← На головну</a>
+</div>
+
+@code {
+    private string level = "A1";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        if (UserService.CurrentUser == null) { Nav.NavigateTo("/auth"); return; }
+        level = UserService.CurrentUser.ProgressProfile.Level;
+    }
+
+    private void Start(string mode) => Nav.NavigateTo($"/game?mode={mode}");
+}
+
+<style>
+    .play-panel { max-width: 420px; }
+    .muted { color: #b0bec5; font-size: 0.85rem; display: block; }
+    .mode-pick {
+        width: 100%; text-align: left; padding: 14px; margin: 8px 0;
+        background: rgba(0,0,0,0.3); border: 1px solid rgba(128,12,25,0.5);
+        border-radius: 10px; color: #f7e6e8; cursor: pointer;
+    }
+    .mode-pick:hover { background: rgba(78,7,15,0.6); }
+    .mode-random { border-color: #ffd54f; }
+    .back-link { display: block; margin-top: 16px; color: #b0bec5; text-align: center; }
+</style>

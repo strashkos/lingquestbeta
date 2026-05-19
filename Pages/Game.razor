@@ -1,0 +1,284 @@
+@page "/game"
+@using LinguaQuest.Core
+@using LinguaQuest.Models
+@inject IWordService WordService
+@inject IUserService UserService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@if (!ready)
+{
+    <p>Завантаження...</p>
+}
+else if (UserService.CurrentUser == null)
+{
+    Nav.NavigateTo("/auth");
+}
+else
+{
+<div class="game-wrapper-glass">
+    @if (sessionEnded)
+    {
+        <div class="end-screen">
+            @if (levelCompleted)
+            {
+                <h2>🏆 Рівень @activeLevel завершено!</h2>
+                <p class="muted">Усі слова вивчено. Перейдіть до наступного рівня.</p>
+            }
+            else
+            {
+                <h2>🎉 Сесію завершено!</h2>
+                <p class="muted">Немає нових слів для поточного рівня.</p>
+            }
+            <button class="action-btn-burgundy" @onclick="GoToLevels">Рівні</button>
+            <button class="action-btn-burgundy secondary" @onclick="GoToPlay">Інший режим</button>
+        </div>
+    }
+    else if (activeRoundMode == null)
+    {
+        <p>Завантаження раунду...</p>
+    }
+    else
+    {
+        <div class="game-header-row">
+            <span class="mode-badge">🕹️ @activeRoundMode.ModeName</span>
+            <span class="timer-display">⏱️ <span id="timer-count">30</span>s</span>
+        </div>
+        <p class="progress-line">📊 @learnedInLevel / @totalInLevel слів рівня @activeLevel</p>
+
+        <p class="hint-line">💡 @activeRoundMode.Hint</p>
+        <h1 class="main-word-display">@activeRoundMode.QuestionText</h1>
+
+        @if (activeRoundMode is QuickFindMode choiceMode)
+        {
+            <div class="options-grid">
+                @foreach (var opt in choiceMode.Options)
+                {
+                    <button class="opt-btn" disabled="@answerLocked" @onclick="() => HandleAnswerSubmit(opt)">@opt</button>
+                }
+            </div>
+        }
+        else if (activeRoundMode is LetterScrambleMode scrambleMode)
+        {
+            <div class="scramble-container">
+                <p class="scrambled-letters-box">🧩 <strong>@scrambleMode.ScrambledLetters</strong></p>
+                <input @bind="userTextAnswer" class="custom-input" disabled="@answerLocked" placeholder="Зберіть слово..." />
+                <button class="action-btn-burgundy" disabled="@answerLocked" @onclick="SubmitTextAnswer">Надіслати</button>
+            </div>
+        }
+        else if (activeRoundMode is SentenceComposeMode)
+        {
+            <div class="compose-container">
+                <input @bind="userTextAnswer" class="custom-input" disabled="@answerLocked" placeholder="Введіть переклад..." />
+                <button class="action-btn-burgundy" disabled="@answerLocked" @onclick="SubmitTextAnswer">Перевірити</button>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(feedbackMessage))
+        {
+            <div class="feedback-banner @bannerCssClass">@feedbackMessage</div>
+        }
+
+        <button class="btn-exit" @onclick="ExitGame">← Вийти з гри</button>
+    }
+</div>
+}
+
+<style>
+    .game-wrapper-glass {
+        background: rgba(44, 3, 7, 0.6);
+        border: 1px solid rgba(128, 12, 25, 0.3);
+        border-radius: 16px;
+        padding: 24px;
+        backdrop-filter: blur(15px);
+        width: 100%;
+        max-width: 480px;
+        box-sizing: border-box;
+        margin: 0 auto;
+    }
+    .game-header-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; }
+    .progress-line { text-align: center; color: #b0bec5; font-size: 0.85rem; margin: 0 0 8px; }
+    .main-word-display { font-size: 2.3rem; text-align: center; margin: 15px 0; color: #fff; }
+    .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .opt-btn { background: rgba(0,0,0,0.3); border: 1px solid #800c19; color: white; padding: 12px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+    .opt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .opt-btn:hover:not(:disabled) { background: #4e070f; }
+    .custom-input { width: 100%; padding: 12px; background: rgba(0,0,0,0.5); border: 1px solid #4e070f; color: white; border-radius: 8px; box-sizing: border-box; text-align: center; font-size: 1.1rem; }
+    .action-btn-burgundy { width: 100%; padding: 12px; background: #800c19; color: white; border: none; border-radius: 8px; margin-top: 10px; font-weight: bold; cursor: pointer; }
+    .action-btn-burgundy.secondary { background: transparent; border: 1px solid #800c19; margin-top: 8px; }
+    .feedback-banner { margin-top: 15px; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; }
+    .success { background: rgba(76, 175, 80, 0.2); color: #81c784; border: 1px solid #4caf50; }
+    .error { background: rgba(244, 67, 54, 0.2); color: #e57373; border: 1px solid #f44336; }
+    .scrambled-letters-box { text-align: center; color: #ffd54f; font-size: 1.1rem; }
+    .muted { color: #b0bec5; text-align: center; }
+    .btn-exit { margin-top: 16px; width: 100%; background: transparent; border: none; color: #b0bec5; cursor: pointer; text-decoration: underline; }
+    @@media (max-width: 768px) {
+        .game-wrapper-glass { max-width: 100%; padding: 20px 16px; }
+        .main-word-display { font-size: 2rem; }
+    }
+    @@media (max-width: 500px) {
+        .options-grid { grid-template-columns: 1fr; }
+        .main-word-display { font-size: 1.65rem; }
+        .custom-input, .opt-btn { min-height: 44px; }
+    }
+</style>
+
+@code {
+    private static readonly Random Rng = new();
+
+    private bool ready;
+    private bool sessionEnded;
+    private bool levelCompleted;
+    private bool answerLocked;
+    private string activeLevel = "A1";
+    private GameModeType selectedMode = GameModeType.Random;
+
+    private List<Word> allLevelWords = new();
+    private List<Word> wordsPool = new();
+    private GameMode? activeRoundMode;
+    private string userTextAnswer = "";
+    private string feedbackMessage = "";
+    private string bannerCssClass = "";
+    private int learnedInLevel;
+    private int totalInLevel;
+    private DotNetObjectReference<Game>? dotnetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await UserService.RestoreSessionAsync();
+        if (UserService.CurrentUser == null) { ready = true; return; }
+
+        ParseModeFromQuery();
+        activeLevel = UserService.CurrentUser.ProgressProfile.Level;
+        var lvl = StudyOptions.ParseLevel(activeLevel);
+
+        allLevelWords = await WordService.GetWordsAsync(StudyOptions.TargetLanguage, lvl);
+        totalInLevel = allLevelWords.Count;
+        RefreshPoolAndCounts();
+
+        dotnetRef = DotNetObjectReference.Create(this);
+        ready = true;
+
+        if (wordsPool.Count == 0)
+        {
+            sessionEnded = true;
+            levelCompleted = learnedInLevel >= totalInLevel && totalInLevel > 0;
+            if (levelCompleted)
+                await UserService.CompleteLevelIfReadyAsync(activeLevel, totalInLevel);
+        }
+        else
+        {
+            await LoadNextRound();
+        }
+    }
+
+    private void ParseModeFromQuery()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var mode = uri.Query.TrimStart('?').Split('&')
+            .Select(p => p.Split('='))
+            .FirstOrDefault(p => p.Length == 2 && p[0] == "mode")?[1];
+
+        selectedMode = mode?.ToLowerInvariant() switch
+        {
+            "quick" => GameModeType.QuickFind,
+            "compose" => GameModeType.SentenceCompose,
+            "scramble" => GameModeType.LetterScramble,
+            _ => GameModeType.Random
+        };
+    }
+
+    private void RefreshPoolAndCounts()
+    {
+        var learned = UserService.CurrentUser!.ProgressProfile.LearnedWordIds.ToHashSet();
+        learnedInLevel = allLevelWords.Count(w => learned.Contains(w.Id));
+        wordsPool = allLevelWords.Where(w => !learned.Contains(w.Id)).ToList();
+    }
+
+    private async Task LoadNextRound()
+    {
+        feedbackMessage = "";
+        userTextAnswer = "";
+        answerLocked = false;
+        RefreshPoolAndCounts();
+
+        if (wordsPool.Count == 0)
+        {
+            activeRoundMode = null;
+            sessionEnded = true;
+            levelCompleted = totalInLevel > 0 && learnedInLevel >= totalInLevel;
+            if (levelCompleted)
+                await UserService.CompleteLevelIfReadyAsync(activeLevel, totalInLevel);
+            return;
+        }
+
+        var word = wordsPool[Rng.Next(wordsPool.Count)];
+        activeRoundMode = CreateMode(word);
+        await JS.InvokeVoidAsync("runTimer", dotnetRef, 30);
+    }
+
+    private GameMode CreateMode(Word word)
+    {
+        var mode = selectedMode == GameModeType.Random
+            ? (GameModeType)Rng.Next(1, 4)
+            : selectedMode;
+
+        return mode switch
+        {
+            GameModeType.QuickFind => new QuickFindMode(word),
+            GameModeType.LetterScramble => new LetterScrambleMode(word),
+            _ => new SentenceComposeMode(word)
+        };
+    }
+
+    private Task SubmitTextAnswer() => HandleAnswerSubmit(userTextAnswer);
+
+    private async Task HandleAnswerSubmit(string selectedAnswer)
+    {
+        if (activeRoundMode == null || answerLocked) return;
+        answerLocked = true;
+        await JS.InvokeVoidAsync("killTimer");
+
+        bool isCorrect = activeRoundMode.CheckAnswer(selectedAnswer);
+        await UserService.UpdateProgressAsync(
+            activeRoundMode.WordId,
+            isCorrect,
+            selectedAnswer,
+            activeRoundMode.ModeName);
+
+        feedbackMessage = isCorrect
+            ? "🎉 Правильно!"
+            : $"❌ Неправильно. Правильна відповідь: {activeRoundMode.CorrectAnswer}";
+        bannerCssClass = isCorrect ? "success" : "error";
+
+        StateHasChanged();
+        await Task.Delay(2000);
+        await LoadNextRound();
+    }
+
+    [JSInvokable]
+    public async Task TriggerTimeOut()
+    {
+        if (activeRoundMode == null || answerLocked) return;
+        answerLocked = true;
+        await UserService.UpdateProgressAsync(
+            activeRoundMode.WordId,
+            false,
+            "",
+            activeRoundMode.ModeName);
+
+        feedbackMessage = "⏱️ Час вийшов!";
+        bannerCssClass = "error";
+        StateHasChanged();
+        await Task.Delay(1500);
+        await LoadNextRound();
+    }
+
+    private void GoToLevels() => Nav.NavigateTo("/levels");
+    private void GoToPlay() => Nav.NavigateTo("/play");
+    private void ExitGame() => Nav.NavigateTo("/dashboard");
+
+    public void Dispose() => dotnetRef?.Dispose();
+
+}
